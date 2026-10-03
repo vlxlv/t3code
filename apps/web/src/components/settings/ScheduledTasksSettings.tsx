@@ -549,7 +549,7 @@ function WebhookDeliveriesDialog({
         </DialogHeader>
         <DialogPanel>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {selectedId !== null && selected === null ? (
+          {selectedId !== null && selected === null && selectedQuery.error === null ? (
             <p className="text-sm text-muted-foreground" role="status">
               Loading delivery…
             </p>
@@ -676,7 +676,10 @@ function WebhookEndpointField({
     const confirmed =
       (await requestConfirmDialog("Rotate this webhook URL?\nThe current URL stops working.", {
         variant: "destructive",
-      })) ?? true;
+      })) ??
+      // No themed dialog host is mounted; fall back to the native prompt
+      // rather than rotating unasked.
+      window.confirm("Rotate this webhook URL? The current URL stops working.");
     if (!confirmed) return;
     setRotating(true);
     const result = await rotate({ environmentId, input: { id: task.id } });
