@@ -39,6 +39,7 @@ import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollVie
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { ThemedSwitch } from "../../components/ThemedSwitch";
 import { tryCopyTextWithHaptic } from "../../lib/copyTextWithHaptic";
+import { usePreparedConnection } from "../../state/session";
 import { buildModelOptions } from "../../lib/modelOptions";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useProjects, useEnvironmentServerConfig } from "../../state/entities";
@@ -585,7 +586,14 @@ function TaskForm({
       environmentUnavailable
     )
       return;
-    const schedule = scheduleFromDraft(draft.schedule);
+    // Signatures are edited on desktop and web; send the task's current one,
+    // not the copy taken when this form opened, so a newer edit survives.
+    const liveTask = tasks.data?.tasks.find((task) => task.id === draft.task?.id);
+    const schedule = scheduleFromDraft(
+      draft.schedule.mode === "webhook" && liveTask?.schedule.type === "webhook"
+        ? { ...draft.schedule, signature: liveTask.schedule.signature }
+        : draft.schedule,
+    );
     if (
       !draft.title.trim() ||
       !draft.prompt.trim() ||
@@ -960,8 +968,14 @@ function WebhookScheduleDetails({
     label: "scheduled task rotate webhook token",
     reportFailure: false,
   });
+  const preparedConnection = usePreparedConnection(environmentId);
+  const httpBaseUrl =
+    preparedConnection._tag === "Some" ? preparedConnection.value.httpBaseUrl : null;
   const webhook = task?.schedule.type === "webhook" ? task.webhook : undefined;
-  const address = webhook ? (webhook.url ?? webhook.path) : null;
+  // Without T3 Connect, the path is resolved on the address this phone uses.
+  const address = webhook
+    ? (webhook.url ?? (httpBaseUrl ? new URL(webhook.path, httpBaseUrl).href : webhook.path))
+    : null;
   return (
     <View className="gap-2 border-t border-border-subtle px-4 py-3">
       <Text className="text-sm text-foreground-muted">
