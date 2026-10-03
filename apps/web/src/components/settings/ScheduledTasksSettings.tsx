@@ -366,12 +366,6 @@ function ScheduledTaskEnvironmentSection({
               description="This task no longer exists or is outside the selected project scope."
               role="status"
             />
-          ) : linkedTask?.schedule.type === "webhook" ? (
-            <SettingsRow
-              title="Webhook tasks can't be edited here yet"
-              description="Update T3 Code to edit this task."
-              role="status"
-            />
           ) : null}
           {tasks.length === 0 ? (
             <SettingsRow
