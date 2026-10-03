@@ -362,9 +362,11 @@ const make = Effect.gen(function* () {
             eq(relayEnvironmentLinks.environmentId, input.environmentId),
             isNull(relayEnvironmentLinks.revokedAt),
             eq(relayEnvironmentLinks.endpointProviderKind, "cloudflare_tunnel"),
+            eq(relayEnvironmentLinks.managedTunnelsEnabled, true),
           ),
         )
-        .limit(5)
+        // One row per user who linked this environment; every row is checked
+        // until one has a ready endpoint, so none may be cut off.
         .pipe(
           Effect.map((rows) =>
             rows.map((row) => ({

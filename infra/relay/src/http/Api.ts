@@ -255,7 +255,7 @@ export const traceRelayHttpRequest = <E, R>(
   });
 
 // Webhook senders put shared secrets and signatures in headers such as
-// x-hub-signature-256, stripe-signature and x-gitlab-token.
+// x-hub-signature-256, stripe-signature, x-gitlab-token and x-webhook-key.
 const webhookHeaderRedactionLayer = Layer.effect(
   Headers.CurrentRedactedNames,
   Effect.map(Headers.CurrentRedactedNames, (names) => [
@@ -263,6 +263,8 @@ const webhookHeaderRedactionLayer = Layer.effect(
     /signature/i,
     /token/i,
     /secret/i,
+    /key/i,
+    /auth/i,
   ]),
 );
 

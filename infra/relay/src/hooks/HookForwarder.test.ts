@@ -194,7 +194,9 @@ describe("HookForwarder", () => {
       }
       // Recomputed from the forwarded bytes, not copied from the sender.
       expect(sent.headers["content-length"]).toBe(String(body.length));
-      expect(harness.rateLimitKeys).toEqual([`${environmentId}:hook-1`]);
+      // The budget key is a hash, so the token never reaches the limiter.
+      expect(harness.rateLimitKeys).toHaveLength(1);
+      expect(harness.rateLimitKeys[0]).toMatch(/^[0-9a-f]{64}$/);
     }),
   );
 
@@ -332,6 +334,17 @@ describe("HookForwarder", () => {
       expect(response.headers["access-control-allow-origin"]).toBeUndefined();
       expect(response.headers["access-control-allow-methods"]).toBeUndefined();
       expect(harness.sent).toHaveLength(0);
+    }),
+  );
+
+  it.effect("gives requests with a wrong token their own budget", () =>
+    Effect.gen(function* () {
+      const harness = makeHarness();
+      yield* harness.send(
+        new Request(hookUrl("hook-1/real-token"), { method: "POST", body: "{}" }),
+      );
+      yield* harness.send(new Request(hookUrl("hook-1/guessed"), { method: "POST", body: "{}" }));
+      expect(new Set(harness.rateLimitKeys).size).toBe(2);
     }),
   );
 

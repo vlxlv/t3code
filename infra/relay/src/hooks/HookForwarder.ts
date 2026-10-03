@@ -52,10 +52,26 @@ export const redactRelayHookUrl = (url: string): string => {
 };
 
 /**
- * Per-environment request budget for public hook forwarding. The key is the
- * environment id only, because the sender chooses the hook id; the environment
- * enforces its own per-hook limits.
+ * Request budget for public hook forwarding, keyed by a hash of the full hook
+ * URL (environment, hook and token). Requests with a wrong token get their own
+ * budget, so they cannot use up a real sender's; the environment rejects them.
  */
+const hookBudgetKey = (hook: {
+  readonly environmentId: string;
+  readonly rawHookId: string;
+  readonly rawToken: string;
+}) =>
+  Effect.promise(() =>
+    crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${hook.environmentId}/${hook.rawHookId}/${hook.rawToken}`),
+    ),
+  ).pipe(
+    Effect.map((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    ),
+  );
+
 export class HookRateLimiter extends Context.Service<
   HookRateLimiter,
   { readonly allow: (key: string) => Effect.Effect<boolean> }
@@ -189,9 +205,7 @@ const make = Effect.gen(function* () {
       yield* outcome("method_not_allowed");
       return errorResponse(405, "method_not_allowed", { allow: "GET, POST, PUT, PATCH" });
     }
-    // Keyed per hook: environment ids appear in every URL handed to senders,
-    // so a per-environment budget would let one junk sender block every hook.
-    if (!(yield* rateLimiter.allow(`${parsed.environmentId}:${parsed.hookId}`))) {
+    if (!(yield* rateLimiter.allow(yield* hookBudgetKey(parsed)))) {
       yield* outcome("rate_limited");
       return errorResponse(429, "rate_limited", {
         "retry-after": String(RELAY_HOOK_RATE_LIMIT.periodSeconds),
