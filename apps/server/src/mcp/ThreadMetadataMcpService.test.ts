@@ -12,9 +12,13 @@ import * as ThreadMetadataMcp from "./ThreadMetadataMcpService.ts";
 const threadId = ThreadId.make("thread:metadata-caller");
 const scope: McpInvocationContext.McpInvocationScope = {
   environmentId: EnvironmentId.make("environment:metadata-test"),
-  threadId,
-  providerSessionId: "provider-session:metadata-test",
-  providerInstanceId: ProviderInstanceId.make("codex"),
+  requestNamespace: "provider-session:metadata-test",
+  thread: {
+    threadId,
+    providerSessionId: "provider-session:metadata-test",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
   capabilities: new Set(["orchestration"]),
   issuedAt: 1,
 };

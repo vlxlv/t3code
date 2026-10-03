@@ -13,7 +13,7 @@ import { modelSelectionCommandType } from "@t3tools/shared/model";
 import {
   newCommandId,
   readCaller,
-  readMutationCaller,
+  readFullAccessCaller,
   readThread,
   readWritableThread,
   unavailable,
@@ -78,22 +78,15 @@ const readQuestion = Effect.fn("mcp.readQuestion")(function* (
 export const ThreadToolkitHandlersLive = ThreadToolkit.toLayer({
   run_scheduled_task_now: (input) =>
     Effect.gen(function* () {
-      const { caller } = yield* readMutationCaller();
-      if (
-        caller.archivedAt !== null ||
-        caller.runtimeMode !== "full-access" ||
-        caller.interactionMode !== "default"
-      )
-        return yield* new OrchestratorMcpFailure({
-          code: "capability_denied",
-          message: "Running a scheduled task requires a live full-access/default thread.",
-        });
+      yield* readFullAccessCaller(
+        "Running a scheduled task requires a live full-access/default thread or a full-access client.",
+      );
       const scheduler = yield* ScheduledTasks.ScheduledTaskService;
       const { tasks } = yield* scheduler.list().pipe(Effect.mapError(unavailable));
-      if (!tasks.some((task) => task.id === input.taskId && task.projectId === caller.projectId))
+      if (!tasks.some((task) => task.id === input.taskId))
         return yield* new OrchestratorMcpFailure({
           code: "invalid_request",
-          message: "The task was not found in the calling project.",
+          message: "The scheduled task was not found.",
         });
       const { task } = yield* scheduler
         .runNow({ id: input.taskId })
@@ -108,14 +101,20 @@ export const ThreadToolkitHandlersLive = ThreadToolkit.toLayer({
     }),
   t3_thread_search: (input) =>
     Effect.gen(function* () {
-      const { caller } = yield* readCaller();
+      yield* readCaller();
+      const { projectId, ...query } = input;
       const threadSearch = yield* ThreadSearch.ThreadSearch;
-      const result = yield* threadSearch.search(input).pipe(Effect.mapError(unavailable));
-      return { matches: result.matches.filter((match) => match.projectId === caller.projectId) };
+      const result = yield* threadSearch.search(query).pipe(Effect.mapError(unavailable));
+      return {
+        matches:
+          projectId === undefined
+            ? result.matches
+            : result.matches.filter((match) => match.projectId === projectId),
+      };
     }),
   t3_thread_fork: (input) =>
     Effect.gen(function* () {
-      const { threads, projection } = yield* readWritableThread();
+      const { threads, projection } = yield* readWritableThread(input.threadId);
       const commandId = yield* newCommandId();
       const targetThreadId = ThreadId.make(`${commandId}:fork`);
       const result = yield* threads
@@ -134,12 +133,13 @@ export const ThreadToolkitHandlersLive = ThreadToolkit.toLayer({
     }),
   t3_thread_merge_back: (input) =>
     Effect.gen(function* () {
-      const { threads, caller } = yield* readWritableThread(input.targetThreadId);
-      const result = yield* threads
+      const context = yield* readWritableThread(input.targetThreadId);
+      const source = yield* readWritableThread(input.sourceThreadId);
+      const result = yield* context.threads
         .dispatch({
           type: "thread.merge_back",
           commandId: yield* newCommandId(),
-          sourceThreadId: caller.id,
+          sourceThreadId: source.projection.thread.id,
           targetThreadId: input.targetThreadId,
           sourcePoint: input.sourcePoint,
           createdBy: "agent",
@@ -179,7 +179,7 @@ export const ThreadToolkitHandlersLive = ThreadToolkit.toLayer({
       const {
         threads,
         projection: { thread },
-      } = yield* readWritableThread();
+      } = yield* readWritableThread(input.threadId);
       const type = modelSelectionCommandType(thread.providerInstanceId, input.modelSelection);
       const result = yield* threads
         .dispatch({
