@@ -194,7 +194,7 @@ describe("HookForwarder", () => {
       }
       // Recomputed from the forwarded bytes, not copied from the sender.
       expect(sent.headers["content-length"]).toBe(String(body.length));
-      expect(harness.rateLimitKeys).toEqual([environmentId]);
+      expect(harness.rateLimitKeys).toEqual([`${environmentId}:hook-1`]);
     }),
   );
 
@@ -335,7 +335,7 @@ describe("HookForwarder", () => {
     }),
   );
 
-  it.effect("returns 429 when the environment's budget is spent", () =>
+  it.effect("returns 429 when the hook's budget is spent", () =>
     Effect.gen(function* () {
       const harness = makeHarness({ allow: () => false });
       const response = yield* harness.send(new Request(hookUrl(), { method: "POST" }));

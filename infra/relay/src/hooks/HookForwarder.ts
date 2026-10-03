@@ -189,7 +189,9 @@ const make = Effect.gen(function* () {
       yield* outcome("method_not_allowed");
       return errorResponse(405, "method_not_allowed", { allow: "GET, POST, PUT, PATCH" });
     }
-    if (!(yield* rateLimiter.allow(parsed.environmentId))) {
+    // Keyed per hook: environment ids appear in every URL handed to senders,
+    // so a per-environment budget would let one junk sender block every hook.
+    if (!(yield* rateLimiter.allow(`${parsed.environmentId}:${parsed.hookId}`))) {
       yield* outcome("rate_limited");
       return errorResponse(429, "rate_limited", {
         "retry-after": String(RELAY_HOOK_RATE_LIMIT.periodSeconds),
