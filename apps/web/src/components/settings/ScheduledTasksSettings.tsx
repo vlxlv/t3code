@@ -332,7 +332,7 @@ function ScheduledTaskEnvironmentSection({
   const linkedTask = tasks?.find((task) => task.id === taskId);
   const openedLink = useRef(false);
   useEffect(() => {
-    if (!openedLink.current && linkedTask && linkedTask.schedule.type !== "webhook") {
+    if (!openedLink.current && linkedTask) {
       openedLink.current = true;
       onEdit(environment.environmentId, linkedTask);
     }
@@ -479,8 +479,7 @@ function ScheduledTaskRow({
               <MoreHorizontalIcon className="size-4" />
             </MenuTrigger>
             <MenuPopup align="end">
-              {/* Webhook tasks are not editable here yet; saving would drop their URL. */}
-              <MenuItem onClick={onEdit} disabled={task.schedule.type === "webhook"}>
+              <MenuItem onClick={onEdit}>
                 <PencilIcon />
                 Edit
               </MenuItem>
