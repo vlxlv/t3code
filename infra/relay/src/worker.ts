@@ -73,6 +73,7 @@ import * as ManagedEndpointProvider from "./environments/ManagedEndpointProvider
 import * as ManagedEndpointReaper from "./environments/ManagedEndpointReaper.ts";
 import * as ManagedTunnelLimits from "./environments/ManagedTunnelLimits.ts";
 import * as MobileRegistrations from "./agentActivity/MobileRegistrations.ts";
+import * as HookForwarder from "./hooks/HookForwarder.ts";
 
 const webcryptoLayer = Layer.succeed(
   Crypto.Crypto,
@@ -183,6 +184,13 @@ export const ApiLive = Api.make(
     const managedEndpointDnsBinding = yield* Cloudflare.DNS.ReadWriteDns(managedEndpointZone);
     const managedEndpointZoneName = yield* managedEndpointZone.name;
     const managedEndpointCleanupMode = yield* RelayConfiguration.managedEndpointCleanupModeConfig;
+    const hookRateLimit = yield* Cloudflare.RateLimit("HOOK_RATE_LIMIT", {
+      namespaceId: 1001,
+      simple: {
+        limit: HookForwarder.RELAY_HOOK_RATE_LIMIT.limit,
+        period: HookForwarder.RELAY_HOOK_RATE_LIMIT.periodSeconds,
+      },
+    });
 
     //
     // 3. Runtime layers and app construction
@@ -283,6 +291,26 @@ export const ApiLive = Api.make(
       Layer.provide(runtimeLayer),
     );
 
+    // Fails open: a limiter outage must not drop webhooks the environment would accept.
+    const hookRateLimiterLayer = Layer.succeed(HookForwarder.HookRateLimiter, {
+      allow: (key) =>
+        hookRateLimit.limit({ key }).pipe(
+          Effect.map((result) => result.success),
+          Effect.provideService(Alchemy.RuntimeContext, alchemyRuntimeContext),
+          Effect.catch((error) =>
+            Effect.logWarning("Hook rate limiter unavailable", { error: error.message }).pipe(
+              Effect.as(true),
+            ),
+          ),
+        ),
+    });
+
+    const hookRouteLayer = HookForwarder.relayHookRoute.pipe(
+      Layer.provide(HookForwarder.layer),
+      Layer.provide(hookRateLimiterLayer),
+      Layer.provide(runtimeLayer),
+    );
+
     yield* Cloudflare.Queues.consumeQueueMessages<unknown>(
       apnsDeliveryQueue,
       {
@@ -373,7 +401,7 @@ export const ApiLive = Api.make(
         HttpApiScalar.layer(RelayApi, { path: "/docs" }),
         relayDocsRedirectRoute,
       ).pipe(Layer.provide([Etag.layerWeak, httpPlatformNotSupportedLayer, relayCors])),
-      relayNotFoundRoute,
+      Layer.merge(hookRouteLayer, relayNotFoundRoute),
     ).pipe(
       HttpRouter.toHttpEffect,
       Effect.provideService(HttpRouter.RouterConfig, RELAY_HTTP_ROUTER_CONFIG),
@@ -391,6 +419,7 @@ export const ApiLive = Api.make(
         Layer.provideMerge(Cloudflare.Queues.EventSourceLive),
         Layer.provideMerge(Cloudflare.Tunnel.ReadWriteTunnelBinding),
         Layer.provideMerge(Cloudflare.DNS.ReadWriteDnsHttp),
+        Layer.provideMerge(Cloudflare.Workers.RateLimitBinding),
       ),
     ),
   ),

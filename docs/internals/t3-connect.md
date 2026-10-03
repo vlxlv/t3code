@@ -4,6 +4,11 @@ T3 Connect uses Clerk for cloud identity. The relay manages environment links,
 credentials for reaching environments, and managed tunnel allocations. After
 bootstrap, clients send application traffic through the environment's tunnel
 hostname; the relay Worker does not proxy their HTTP or WebSocket sessions.
+The one exception is automation webhooks: the relay forwards
+`/v1/hooks/:environmentId/:hookId/:token` statelessly to the environment's
+tunnel so senders get a stable URL. It never stores or logs bodies or tokens,
+and the environment owns token and signature verification
+([forwarder](../../infra/relay/src/hooks/HookForwarder.ts)).
 
 Clerk, deployment, and native authentication setup live in the
 [Connect setup runbook](../operations/connect-setup.md).
