@@ -1105,8 +1105,6 @@ function EnvironmentTasks({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Edit ${task.title}`}
-              // Webhook tasks are not editable here yet; saving would drop their URL.
-              disabled={task.schedule.type === "webhook"}
               onPress={() => {
                 onEdit(task);
               }}
@@ -1131,7 +1129,7 @@ function EnvironmentTasks({
             </Pressable>
             <ControlPillMenu
               actions={[
-                ...(task.schedule.type === "webhook" ? [] : [{ id: "edit", title: "Edit" }]),
+                { id: "edit", title: "Edit" },
                 { id: "toggle", title: task.enabled ? "Pause" : "Resume" },
                 // A webhook task has no request to run without.
                 ...(task.schedule.type === "webhook" ? [] : [{ id: "run", title: "Run now" }]),
